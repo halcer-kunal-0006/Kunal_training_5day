@@ -396,3 +396,75 @@ class TestAC5_BenchmarkReproducible:
         result = benchmark_vectorized_vs_loop(size=500, seed=0)
         assert result["size"] == 500
         assert result["seed"] == 0
+
+
+
+# ===========================================================================
+# Regression tests — code-review findings B1, B2, B3 and benchmark size
+# ===========================================================================
+
+class TestReviewRegressions:
+    # --- B1: misaligned ticket fields ---
+
+    @pytest.mark.parametrize(
+        "p, r, s",
+        [
+            ([1, 5], [2.0], [0, 1]),
+            ([1], [2.0, 3.0], [0]),
+            ([1, 2], [2.0, 3.0], [0]),
+            ([], [1.0], []),
+        ],
+    )
+    def test_create_ticket_array_rejects_mismatched_lengths(self, p, r, s):
+        with pytest.raises(ValueError, match="equal lengths"):
+            create_ticket_array(p, r, s)
+
+    def test_create_ticket_array_error_names_lengths(self):
+        with pytest.raises(ValueError, match=r"priorities=2.*response_times=1.*statuses=2"):
+            create_ticket_array([1, 5], [2.0], [0, 1])
+
+    def test_create_ticket_array_all_empty_ok(self):
+        out = create_ticket_array([], [], [])
+        assert all(a.size == 0 for a in out.values())
+
+    # --- B2: empty normaliser input ---
+
+    def test_normalise_empty_returns_empty_float(self):
+        out = normalise_response_times(np.array([]))
+        assert out.shape == (0,)
+        assert out.dtype == np.float64
+
+    def test_normalise_empty_typed_input(self):
+        out = normalise_response_times(np.array([], dtype=np.float32))
+        assert out.size == 0 and out.dtype == np.float64
+
+    def test_normalise_all_nan_stays_nan(self):
+        out = normalise_response_times(np.array([np.nan, np.nan]))
+        assert out.shape == (2,) and np.isnan(out).all()
+
+    # --- B3: NaN mask preserved ---
+
+    def test_normalise_constant_with_nan_preserves_mask(self):
+        out = normalise_response_times(np.array([5.0, np.nan, 5.0]))
+        np.testing.assert_array_equal(out, [0.0, np.nan, 0.0])
+
+    def test_normalise_varying_with_nan_preserves_mask(self):
+        out = normalise_response_times(np.array([1.0, np.nan, 3.0]))
+        np.testing.assert_allclose(out, [0.0, np.nan, 1.0])
+
+    def test_normalise_constant_only_unchanged(self):
+        np.testing.assert_array_equal(
+            normalise_response_times(np.array([5.0, 5.0, 5.0])), [0.0, 0.0, 0.0]
+        )
+
+    def test_normalise_does_not_mutate_input(self):
+        arr = np.array([5.0, np.nan, 5.0])
+        normalise_response_times(arr)
+        np.testing.assert_array_equal(arr, [5.0, np.nan, 5.0])
+
+    # --- Benchmark size validation ---
+
+    @pytest.mark.parametrize("size", [0, -1])
+    def test_benchmark_rejects_non_positive_size(self, size):
+        with pytest.raises(ValueError, match="positive"):
+            benchmark_vectorized_vs_loop(size=size)

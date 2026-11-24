@@ -29,7 +29,7 @@ task 5/
 │   └── numerical_utils.py   ← all the functions you use (Tasks A, B, C, D)
 │
 ├── tests/
-│   └── test_numerical_utils.py  ← 47 automated checks (one per requirement)
+│   └── test_numerical_utils.py  ← 62 automated checks (47 baseline + 15 review regressions)
 │
 ├── run_benchmark.py         ← run this to see NumPy vs plain loop speed
 ├── conftest.py              ← tells Python where to find the code
@@ -54,7 +54,7 @@ pip install numpy pytest
 python -m pytest
 ```
 
-You should see **47 tests pass** in about a second.
+You should see **62 tests pass** in about a second.
 
 **Step 3 — See the benchmark** (NumPy vs a plain loop):
 
@@ -123,7 +123,8 @@ long each took, and checks that both answers match.
 - Response times are measured in **hours**.
 - Priority codes are whole numbers between **0 and 5**.
 - Status codes are **0** (open), **1** (closed), **2** (escalated) — stored as a 1-byte integer to save memory.
-- If you pass an empty array to the stats functions, you get `NaN` back — not an error.
+- If you pass an empty array to the stats functions, you get `NaN` back — not an error. `normalise_response_times()` returns an empty array for empty input and keeps `NaN` entries as `NaN`.
+- `create_ticket_array()` raises `ValueError` if priorities, response times and statuses differ in length; `benchmark_vectorized_vs_loop()` raises `ValueError` if `size` is not positive.
 - `replace_nan()` always returns a **new copy**; your original array is never changed.
 - Benchmark timings are wall-clock time and will look different on a faster or slower machine.
 
@@ -143,7 +144,7 @@ long each took, and checks that both answers match.
 
 3. **What is the difference between a Python list and a NumPy array?**
    A list can hold anything (mixed types, objects). A NumPy array holds one type of number
-   in one continuous block of memory, so operations are 10–100× faster.
+   in one continuous block of memory, so operations are typically much faster — the gap grows with array size (see the benchmark table).
 
 4. **What does the `axis` argument mean?**
    It picks which direction to collapse. `axis=0` works down the rows; `axis=1` works

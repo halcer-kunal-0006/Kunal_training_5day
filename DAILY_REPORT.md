@@ -24,7 +24,7 @@
 ## Tests / experiment results
 
 ```
-======================== 47 passed, 5 warnings in 0.05s ========================
+======================== 62 passed, 5 warnings in 0.05s ========================
 ```
 
 5 RuntimeWarnings are expected (all-NaN array edge case); tests assert NaN output correctly.
@@ -34,18 +34,18 @@
 ```
       Size      Vec mean     Loop mean     Vec (s)    Loop (s)  Match
 --------------------------------------------------------------------
-     1,000    50.287870    50.287870  0.000066    0.001144  ✅
-    10,000    50.497437    50.497437  0.000026    0.011036  ✅
-   100,000    50.038029    50.038029  0.000094    0.108575  ✅
+     1,000     50.220606     50.220606    0.000016    0.000028  ✅
+    10,000     50.215038     50.215038    0.000007    0.000269  ✅
+   100,000     50.561869     50.561869    0.000016    0.002671  ✅
 ```
 
 > Note: timings are wall-clock on this machine and will differ on other hardware.
 > No speedup ratio is claimed in the tests; the assertion is only correctness.
 
 ## One bug or challenge and its root cause
-**Bug:** `normalise_response_times` raised `ZeroDivisionError` when all values were identical.
-**Root cause:** `max - min == 0`, so dividing by the range caused a divide-by-zero.
-**Fix:** Added an explicit guard — `if rng == 0: return np.zeros_like(...)`.
+**Bug:** `normalise_response_times` produced NaN (with a NumPy `RuntimeWarning: invalid value encountered in divide`) when all values were identical. NumPy float division does not raise `ZeroDivisionError`; that exception only comes from plain Python floats (as in the benchmark with `size=0`).
+**Root cause:** `max - min == 0`, so `0 / 0` gave NaN for every element.
+**Fix:** Explicit zero-range branch returning zeros for valid values. Review follow-up: that branch originally also zeroed NaN entries, which silently turned missing data into 0; it now keeps NaN in place. Empty input now returns an empty float array.
 
 ## One design decision and why
 Used `np.nanstd` (population std, ddof=0) in the vectorised path and matched it exactly in

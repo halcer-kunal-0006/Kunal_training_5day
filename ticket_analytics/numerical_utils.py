@@ -44,7 +44,23 @@ def create_ticket_array(
     Returns
     -------
     dict with keys 'priorities', 'response_times', 'statuses'
+
+    Raises
+    ------
+    ValueError
+        If the three input lists do not all have the same length (each index
+        must describe the same ticket).
     """
+    lengths = {
+        "priorities": len(priorities),
+        "response_times": len(response_times),
+        "statuses": len(statuses),
+    }
+    if len(set(lengths.values())) != 1:
+        raise ValueError(
+            "Ticket fields must have equal lengths, got "
+            + ", ".join(f"{k}={v}" for k, v in lengths.items())
+        )
     return {
         "priorities": np.array(priorities, dtype=dtype_priority),
         "response_times": np.array(response_times, dtype=dtype_response),
@@ -170,13 +186,32 @@ def normalise_response_times(response_times: np.ndarray) -> np.ndarray:
     """
     Min-max normalise *response_times* to [0, 1] using vectorized ops.
 
-    If all values are identical (zero range), returns an array of zeros.
-    NaN values remain NaN after normalisation.
+    Edge-case policy (consistent with Task C):
+      * empty input        -> empty float64 array (no exception)
+      * all-NaN input      -> same-shaped array of NaN
+      * zero range         -> 0.0 for every valid value
+      * NaN values         -> stay NaN in every branch (the missing-value
+                              mask is never rewritten as data)
+
+    Note: dividing by a zero range in NumPy does not raise
+    ``ZeroDivisionError``; it emits a RuntimeWarning and yields NaN/inf.
+    The explicit zero-range branch below avoids that.
     """
-    rng = np.nanmax(response_times) - np.nanmin(response_times)
+    arr = np.asarray(response_times, dtype=np.float64)
+    if arr.size == 0:
+        return np.empty(arr.shape, dtype=np.float64)
+
+    valid = ~np.isnan(arr)
+    if not valid.any():
+        return arr.copy()
+
+    lo = arr[valid].min()
+    rng = arr[valid].max() - lo
     if rng == 0:
-        return np.zeros_like(response_times, dtype=np.float64)
-    return (response_times - np.nanmin(response_times)) / rng
+        out = np.zeros(arr.shape, dtype=np.float64)
+        out[~valid] = np.nan
+        return out
+    return (arr - lo) / rng
 
 
 # ---------------------------------------------------------------------------
@@ -228,8 +263,13 @@ def benchmark_vectorized_vs_loop(
     Uses a fixed *seed* for reproducibility.  Returns timing dict so callers
     can assert that neither method crashes and that results agree closely.
 
-    Note: results are informational; speedup ratios may vary per machine.
+    Raises ValueError if *size* is not positive.
+
+    Note: results are informational; speedup ratios depend on sample size
+    and machine, so no fixed ratio is claimed.
     """
+    if size <= 0:
+        raise ValueError(f"size must be a positive integer, got {size}")
     rng = np.random.default_rng(seed)
     data = rng.uniform(1.0, 100.0, size=size)
 
